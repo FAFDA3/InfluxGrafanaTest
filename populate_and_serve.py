@@ -1,4 +1,6 @@
 from flask import Flask, jsonify
+from flask_cors import CORS  # <--- aggiungi questa riga
+
 from threading import Thread
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
@@ -17,6 +19,7 @@ query_api = client.query_api()
 
 # ========== SERVER FLASK ========== #
 app = Flask(__name__)
+CORS(app)
 
 @app.route("/api/latest")
 def get_latest_data():
@@ -26,6 +29,31 @@ def get_latest_data():
           |> filter(fn: (r) => r._measurement == "sensori")
           |> filter(fn: (r) => r._field == "temperatura" or r._field == "energia")
           |> last()
+    '''
+    tables = query_api.query(query=query, org=org)
+
+    results = []
+    for table in tables:
+        for record in table.records:
+            results.append({
+                "field": record.get_field(),
+                "value": record.get_value(),
+                "time": record.get_time().isoformat()
+            })
+
+    return jsonify(results)
+
+
+@app.route("/api/storico")
+def get_storico():
+    query = f'''
+        from(bucket: "{bucket}")
+          |> range(start: 0)
+          |> filter(fn: (r) => r._measurement == "sensori")
+          |> filter(fn: (r) => r._field == "temperatura" or r._field == "energia")
+          |> sort(columns: ["_time"], desc: true)
+          |> limit(n: 300)
+          |> sort(columns: ["_time"])  // riordiniamo in ordine crescente
     '''
     tables = query_api.query(query=query, org=org)
 
